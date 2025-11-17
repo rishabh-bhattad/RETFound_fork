@@ -88,14 +88,25 @@ def get_args_parser():
     # ---- Finetuning & adaptation
     parser.add_argument("--finetune", default="", type=str, help="Checkpoint id/path (see model rules below)")
     parser.add_argument("--task", default="", type=str, help="Task name for logging/output grouping")
-    parser.add_argument("--adaptation", default="finetune", choices=["finetune", "lp"],
+    parser.add_argument("--adaptation", default="finetune", choices=["finetune", "lp", "partial"],
                         help="Adaptation strategy: finetune=full fine-tune, lp=linear probe (train head only)")
+    parser.add_argument(
+    '--unfreeze_last_n_blocks',
+    type=int,
+    default=2,
+    help='For partial adaptation: how many last transformer blocks to unfreeze')
 
+    parser.add_argument(
+        '--partial_unfreeze_norm',
+        action='store_true',
+        help='For partial adaptation: also unfreeze all LayerNorm parameters'
+    )
     # ---- Dataset & paths
     parser.add_argument("--data_path", default="./data/", type=str)
     parser.add_argument("--nb_classes", default=8, type=int)
     parser.add_argument("--output_dir", default="./output_dir")
     parser.add_argument("--log_dir", default="./output_logs")
+
 
     # >>> NEW: training data efficiency <<<
     parser.add_argument(
@@ -194,7 +205,7 @@ def main(args, criterion):
                 f"Expected one of: Dinov3, Dinov2, RETFound_dinov2, RETFound_mae"
             )
 
-        checkpoint = torch.load(checkpoint_path, map_location="cpu")
+        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
         print(f"Loaded pre-trained checkpoint from: {checkpoint_path}")
 
         if args.model in ["Dinov3", "Dinov2"]:
@@ -310,6 +321,40 @@ def main(args, criterion):
         for name, param in model.named_parameters():
             param.requires_grad = ("head" in name)
         print("[Adaptation] Linear probe: training classifier head only.")
+    elif args.adaptation == "partial":
+        # 1) Freeze everything
+        for p in model.parameters():
+            p.requires_grad = False
+
+        # 2) Always train classifier head
+        if hasattr(model, "head"):
+            for p in model.head.parameters():
+                p.requires_grad = True
+
+        # 3) Unfreeze last N transformer blocks (RETFound is ViT-style)
+        #    Common pattern: model.blocks is a nn.ModuleList of encoder blocks
+        if args.unfreeze_last_n_blocks is not None:
+            if hasattr(model, "blocks"):
+                blocks = list(model.blocks)
+            elif hasattr(model, "encoder") and hasattr(model.encoder, "blocks"):
+                blocks = list(model.encoder.blocks)
+            else:
+                raise RuntimeError(
+                    "Could not find transformer blocks on RETFound model. "
+                    "Check attribute names (e.g. model.blocks or model.encoder.blocks)."
+                )
+
+            if args.unfreeze_last_n_blocks > 0:
+                for block in blocks[-args.unfreeze_last_n_blocks:]:
+                    for p in block.parameters():
+                        p.requires_grad = True
+
+        # 4) Optionally unfreeze all LayerNorms (helps optimization sometimes)
+        if args.unfreeze_norm:
+            for m in model.modules():
+                if isinstance(m, torch.nn.LayerNorm):
+                    for p in m.parameters():
+                        p.requires_grad = True
     else:
         print("[Adaptation] Full fine-tuning: training all parameters.")
 
@@ -422,7 +467,7 @@ def main(args, criterion):
     # Final Test (Best Ckpt)
     # =========================
     ckpt_path = os.path.join(args.output_dir, args.task, "checkpoint-best.pth")
-    checkpoint = torch.load(ckpt_path, map_location="cpu")
+    checkpoint = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     model_without_ddp.load_state_dict(checkpoint["model"], strict=False)
     model.to(device)
     print(f"Test with the best model, epoch = {checkpoint.get('epoch', -1)}:")
