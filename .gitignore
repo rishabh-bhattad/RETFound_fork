@@ -132,3 +132,6 @@ dmypy.json
 .pyre/
 
 IDRiD_data
+
+output_logs/
+*.pth
