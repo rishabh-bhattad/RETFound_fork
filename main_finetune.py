@@ -89,17 +89,12 @@ def get_args_parser():
     parser.add_argument("--finetune", default="", type=str, help="Checkpoint id/path (see model rules below)")
     parser.add_argument("--task", default="", type=str, help="Task name for logging/output grouping")
     parser.add_argument("--adaptation", default="finetune", choices=["finetune", "lp", "partial"],
-                        help="Adaptation strategy: finetune=full fine-tune, lp=linear probe (train head only)")
-    parser.add_argument(
-    '--unfreeze_last_n_blocks',
-    type=int,
-    default=2,
-    help='For partial adaptation: how many last transformer blocks to unfreeze')
+                        help="Adaptation strategy: finetune=full fine-tune, lp=linear probe (train head only)" \
+                        "partial = unfreeze last N transformer blocks + head")
+    parser.add_argument('--unfreeze_last_n_blocks', type=int, default=2,
+                        help='For partial adaptation: how many last transformer blocks to unfreeze')
 
-    parser.add_argument(
-        '--partial_unfreeze_norm',
-        action='store_true',
-        help='For partial adaptation: also unfreeze all LayerNorm parameters'
+    parser.add_argument('--partial_unfreeze_norm', action='store_true', help='For partial adaptation: also unfreeze all LayerNorm parameters'
     )
     # ---- Dataset & paths
     parser.add_argument("--data_path", default="./data/", type=str)
@@ -350,7 +345,7 @@ def main(args, criterion):
                         p.requires_grad = True
 
         # 4) Optionally unfreeze all LayerNorms (helps optimization sometimes)
-        if args.unfreeze_norm:
+        if args.partial_unfreeze_norm:
             for m in model.modules():
                 if isinstance(m, torch.nn.LayerNorm):
                     for p in m.parameters():
