@@ -14,13 +14,9 @@ export CUDA_VISIBLE_DEVICES=1
 
 # ====== Seeds to try ======
 seeds=(42 77 123 999 2025)
+EPOCHS=50
 
-# ====== Choose LR based on adaptation ======
-if [ "$ADAPTATION" = "lp" ]; then
-  BLR=0.001    # base learning rate for LP
-else
-  BLR=0.0001   # base learning rate for partial/finetune
-fi
+BLR=0.001
 
 for seed in "${seeds[@]}"; do
   echo "======================================="
@@ -30,8 +26,8 @@ for seed in "${seeds[@]}"; do
   # Give each seed its own task name so logs/models don't overwrite
   timestamp=$(date +"%Y%m%d_%H%M%S")
   task="${MODEL_ARCH}_${DATASET}_${ADAPTATION}_s${seed}_${timestamp}"
-  out_dir="./output_dir/${task}"
-  log_dir="./output_logs/${task}"
+  out_dir="./output_dir/"
+  log_dir="./output_logs"
 
   python main_finetune.py \
     --model "${MODEL}" \
@@ -39,13 +35,18 @@ for seed in "${seeds[@]}"; do
     --finetune "${FINETUNE}" \
     --global_pool \
     --batch_size 16 \
-    --world_size 1 \
-    --epochs 20 \
+    --epochs "${EPOCHS}" \
+    --blr "${BLR}" \
+    --weight_decay 0.05 \
     --nb_classes "${NUM_CLASS}" \
     --data_path "${data_path}" \
     --input_size 224 \
     --task "${task}" \
     --adaptation "${ADAPTATION}" \
+    --partial_unfreeze_norm \
+    --unfreeze_last_n_blocks 1 \
+    --mixup 0.4 \
+    --cutmix 0.0 \
     --device cuda \
     --seed "${seed}" \
     --datasets_seed "${seed}" \
