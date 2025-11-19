@@ -13,13 +13,13 @@ data_path="/data/rishabhbhattad/data/CKD_Study/RETFound_data/CKDRET"
 export CUDA_VISIBLE_DEVICES=0
 
 # ====== Seeds to try ======
-seeds=(42)
+seeds=(42 77 123 999 2025)
 
 # ====== Choose LR based on adaptation ======
 if [ "$ADAPTATION" = "lp" ]; then
-  LR=0.001      # linear probe - a bit higher lr
+  BLR=0.001    # base learning rate for LP
 else
-  LR=0.0001     # finetune / partial - more conservative
+  BLR=0.0001   # base learning rate for partial/finetune
 fi
 
 for seed in "${seeds[@]}"; do
@@ -39,6 +39,7 @@ for seed in "${seeds[@]}"; do
     --finetune "${FINETUNE}" \
     --global_pool \
     --batch_size 16 \
+    --blr "${BLR}" \
     --world_size 1 \
     --epochs 20 \
     --nb_classes "${NUM_CLASS}" \
