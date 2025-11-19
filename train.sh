@@ -10,7 +10,7 @@ DATASET="CKDRET"
 NUM_CLASS=2
 data_path="/data/rishabhbhattad/data/CKD_Study/RETFound_data/CKDRET"
 
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=1
 
 # ====== Seeds to try ======
 seeds=(42 77 123 999 2025)
@@ -39,7 +39,6 @@ for seed in "${seeds[@]}"; do
     --finetune "${FINETUNE}" \
     --global_pool \
     --batch_size 16 \
-    --blr "${BLR}" \
     --world_size 1 \
     --epochs 20 \
     --nb_classes "${NUM_CLASS}" \
