@@ -23,7 +23,7 @@ from huggingface_hub import hf_hub_download, login  # login imported as in origi
 import models_vit as models
 import util.lr_decay as lrd
 import util.misc as misc
-from util.datasets import build_dataset
+from util.datasets import build_dataset, patient_data_splitter, build_transform, ImageDFDataset
 from util.pos_embed import interpolate_pos_embed
 from util.misc import NativeScalerWithGradNormCount as NativeScaler
 from engine_finetune import train_one_epoch, evaluate
@@ -96,6 +96,11 @@ def get_args_parser():
 
     parser.add_argument('--partial_unfreeze_norm', action='store_true', help='For partial adaptation: also unfreeze all LayerNorm parameters'
     )
+
+    # CV variable
+    parser.add_argument('--fold', default=None, type=int, help='Fold index (0-4) for CV. If None, uses default build_dataset.')
+    parser.add_argument('--metadata_csv', default='metadata.csv', type=str, help='Path to the metadata CSV file.')
+
     # ---- Dataset & paths
     parser.add_argument("--data_path", default="./data/", type=str)
     parser.add_argument("--nb_classes", default=8, type=int)
@@ -233,9 +238,27 @@ def main(args, criterion):
             trunc_normal_(model.head.weight, std=2e-5)
 
     # ---- Datasets & samplers
-    dataset_train = build_dataset(is_train="train", args=args)
-    dataset_val   = build_dataset(is_train="val",   args=args)
-    dataset_test  = build_dataset(is_train="test",  args=args)
+    if args.fold is not None:
+        csv_full_path = os.path.join(args.data_path, args.metadata_csv)
+        print(f"Loading CV splits from {csv_full_path} for fold {args.fold}")
+
+        df_rem, df_test, folds = patient_data_splitter(
+            csv_path=csv_full_path, 
+            test_size=0.2, 
+            seed=args.seed, 
+            n_splits=5
+        )
+
+        train_idx, val_idx = folds[args.fold]
+
+        dataset_train = ImageDFDataset(df_rem.iloc[train_idx], transform=build_transform(True, args))
+        dataset_val   = ImageDFDataset(df_rem.iloc[val_idx], transform=build_transform(False, args))
+        dataset_test  = ImageDFDataset(df_test, transform=build_transform(False, args))
+    else:
+        # Fallback to original ImageFolder behavior
+        dataset_train = build_dataset(is_train="train", args=args)
+        dataset_val   = build_dataset(is_train="val",   args=args)
+        dataset_test  = build_dataset(is_train="test",  args=args)
 
     num_tasks   = misc.get_world_size()
     global_rank = misc.get_rank()

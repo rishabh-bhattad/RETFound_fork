@@ -6,6 +6,7 @@ MODEL_ARCH="retfound_mae"
 FINETUNE="RETFound_mae_natureCFP"
 
 # ==== Data settings ====
+FOLDS=(0 1 2 3 4)
 DATASET="CKDRET"
 NUM_CLASS=2
 data_path="/data/rishabhbhattad/data/CKD_Study/RETFound_data/CKDRET"
